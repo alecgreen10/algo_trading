@@ -73,7 +73,10 @@ def backtest2(
 	final = backtest(backward,forward,tickers)
 	return final
 
-
+def ann_return(nweek_return, bwd_window):
+	exp = 52.0/bwd_window
+	# return [(nweek_return+1)**(exp)-1]*100.00
+	return (((nweek_return)/100.00+1.0)**(exp) - 1.0)*100.00
 
 ######################################### execute script ########################################################
 dow_historical_data = get_stock_data_historical(dow_list,"12/04/2017","12/04/2019", "1wk", "spy")
@@ -97,50 +100,59 @@ testing = backtest2(dow_historical_data,5,5,2,dow_list)
 
 ############################################ Set up the axes ######################################################
 # use backtest2
-backward_window = list(range(8,14))
-backward_threshold = list(range(8,14))
+backward_window = list(range(8,14)) ## x axis
+backward_threshold = list(range(8,14)) ## y axis
+forward_window = list(range(1,7))
 
+X, Y = np.meshgrid(backward_window, backward_threshold)
+Z = np.random.rand(len(backward_window),len(backward_threshold))
 
 # below is a sample code which runs avg pnl across a range of inputs. Need to put these entries into an array
-for i in backward_window:
-	for j in backward_threshold:
-		x = backtest2(dow_historical_data,i,j,2,dow_list)
-		print("for backward window " + str(i) + " and backward threshold" + str(j)+ ", 2 week pnl is" + str(x))
+for i in range(len(backward_window)):
+	for j in range(len(backward_threshold)):
+		Z[i][j] = backtest2(dow_historical_data,backward_window[i],backward_threshold[j],2,dow_list)
+		
 
-
+backtest2(dow_historical_data,8,9,2,dow_list)
 
 
 ############################################# Plot the data #############################################
 # need to generate a scatter plot where i vary the backward window, backward threshold, forward window
 # for now will fix foward window
 
-
 # setup the figure and axes
 from mpl_toolkits import mplot3d
 import numpy as np
 import matplotlib.pyplot as plt
  
-fig = plt.figure(figsize=(12, 12))
-ax = fig.add_subplot(projection='3d')
 
-for i in backward_window:
-	for j in backward_threshold
+fig = plt.figure()
+ax = plt.axes(projection='3d')
+ax.contour3D(X, Y, Z, 50, cmap='binary')
+ax.set_xlabel('x')
+ax.set_ylabel('y')
+ax.set_zlabel('z')
 
+fig.show()
 
-sequence_containing_z_vals = list(range(0, 100))
+####################################### this didnt work, too messy #########################################
+#################################### going to redo in dataframe, export to excel ###########################
 
-random.shuffle(sequence_containing_x_vals)
-random.shuffle(sequence_containing_y_vals)
-random.shuffle(sequence_containing_z_vals)
+lists = [backward_window, backward_threshold, forward_window]
 
-ax.scatter(sequence_containing_x_vals, sequence_containing_y_vals, sequence_containing_z_vals)
-plt.show()
+df1 = pd.DataFrame(list(itertools.product(*lists)), columns=['backward_window', 'backward_threshold', 'forward_window'])
+
+df1['n-week return'] = df1.apply(lambda row : backtest2(dow_historical_data, row['backward_window'].astype(int), row['backward_threshold'],row['forward_window'],dow_list), axis = 1)
+df1['annual return'] = df1.apply(lambda row : ann_return(row['n-week return'], row['forward_window']), axis = 1)
+
+df1.sort_values(by='annual return', ascending=False)
+
 
 
 
 with pd.ExcelWriter('output.xlsx') as writer:  
-    dow_historical_data.to_excel(writer, sheet_name='Sheet_name_1')
-    four_week_momentum.to_excel(writer, sheet_name='Sheet_name_2')
+    df1.to_excel(writer, sheet_name='Sheet_name_1')
+
 
 
 
