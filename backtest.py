@@ -5,6 +5,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
+
+# current strategy:
+# bkward function: returns % gains for entire universe
+# fwd function: returns % gains for entire universe
+# winner function: Mess/clusterF
+
+#new strategy
+
+
+
 dow_list = si.tickers_dow()
 ndx_list = si.tickers_nasdaq()
 spx_list = si.tickers_sp500()
@@ -77,6 +87,9 @@ def ann_return(nweek_return, bwd_window):
 	exp = 52.0/bwd_window
 	# return [(nweek_return+1)**(exp)-1]*100.00
 	return (((nweek_return)/100.00+1.0)**(exp) - 1.0)*100.00
+
+
+
 
 ######################################### execute script ########################################################
 dow_historical_data = get_stock_data_historical(dow_list,"12/04/2017","12/04/2019", "1wk", "spy")
