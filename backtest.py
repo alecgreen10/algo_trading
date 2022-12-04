@@ -3,6 +3,7 @@ import yahoo_fin.stock_info as si
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from datetime import timedelta
 
 
 
@@ -11,7 +12,12 @@ import matplotlib.pyplot as plt
 # fwd function: returns % gains for entire universe
 # winner function: Mess/clusterF
 
+
 #new strategy
+
+# bkwd function: input(mkt data, lookback window); output(% return)
+# fwd function: input(mkt data, lookfwd window); output(% return)
+# backtest: inpt(mkt data, lookback window, lookfwd window, lookback threshold, comparison stock); output(date bought, stocks bought, date sold, return by stock, begin price, end price)
 
 
 
@@ -36,6 +42,10 @@ def get_stock_data_historical(list_of_tickers, start, end, interval, baseline_ti
 			pass
 	return base_data
 
+dow_historical_data = get_stock_data_historical(dow_list,"12/04/2017","12/04/2019", "1wk", "spy")
+
+
+
 def compute_backward_return(historical_data, period):
 	output = historical_data
 	output = output.rolling(window=period+1).apply(lambda x: 100.0*(x.iloc[period] - x.iloc[0])/x.iloc[0])
@@ -47,90 +57,35 @@ def compute_forward_return(historical_data, period):
 	output = output.sort_index(ascending=False).rolling(window=period+1).apply(lambda x: 100.00*(x.iloc[0] - x.iloc[period])/x.iloc[period]).sort_index(ascending=True)
 	return output
 
-def is_winner(bwd_return, fwd_return, tickers, backward_threshold): 
-	backward = bwd_return.sub(bwd_return['spy'],axis=0)
-	forward = fwd_return.sub(fwd_return['spy'],axis = 0)
-	winners = fwd_return*0.0
-	for i in tickers:
-		backward[i] = bwd_return[i].apply(lambda x: 1 if x >backward_threshold  else 0)
-		forward[i] = fwd_return[i].apply(lambda x: 1 if x >3  else 0)
-		winners[i] = backward[i]*forward[i]
-	return backward.fillna(0),forward.fillna(0),winners.fillna(0)
-
-def backtest(backward_winners, returns, tickers):
-	returns1 = returns.sub(returns['spy'],axis = 0)
-	pnl = returns*0.0
-	for i in tickers:
-		pnl[i] = backward_winners[i]*returns1[i]
-	return pnl.to_numpy().sum()/backward_winners.to_numpy().sum()
 
 
-def backtest2(
-	daily_prices, 
-	bwd_window, 
-	backward_threshold, 
-	fwd_window,
-	tickers
-	):
-	# daily_prices = raw data
-	# bwd_window = # of weeks to calc return %
-	# backward_threshold = % gain which we will consider as a winner
-	# fwd_window = $ of weeks to calc return %
-	# returns the avg fwd return across all "winners"
-	bwd_return = compute_backward_return(daily_prices,bwd_window)
-	fwd_return = compute_forward_return(daily_prices,fwd_window)
-	backward,forward,winners = is_winner(bwd_return,fwd_return,tickers, backward_threshold)
-	final = backtest(backward,forward,tickers)
-	return final
-
-def ann_return(nweek_return, bwd_window):
-	exp = 52.0/bwd_window
-	# return [(nweek_return+1)**(exp)-1]*100.00
-	return (((nweek_return)/100.00+1.0)**(exp) - 1.0)*100.00
-
-
-
-
-######################################### execute script ########################################################
-dow_historical_data = get_stock_data_historical(dow_list,"12/04/2017","12/04/2019", "1wk", "spy")
-bwd_return = compute_backward_return(dow_historical_data,10)
-fwd_return = compute_forward_return(dow_historical_data,2)
+def calibrator(mkt_data, lookback_window, lookfwd_window, lookback_threshold, baseline_stock):
+	# compute loockback returns
+	# dtermine which stocks are lookback winners,
+	# compute fwd returns 
+	# output(date bought, stocks bought, date sold, return by stock, begin price, end price)
+	# output df: rows = date, columns = list of stocks, date sold, list of return, list of begin price, list of end price
+	loockback_returns = compute_backward_return(mkt_data,lookback_window).iloc[lookback_window : -lookfwd_window , :]
+	loockback_returns_relative = loockback_returns.sub(loockback_returns[baseline_stock],axis=0) # returns vs baseline
+	lookback_winners = loockback_returns_relative.applymap(lambda x: 1 if x > lookback_threshold  else 0)
+	#need to remove spy from averages
+	lookfwd_returns = compute_forward_return(mkt_data,lookfwd_window).iloc[lookback_window:-lookfwd_window, :]
+	lookfwd_returns_relative = lookfwd_returns.sub(lookfwd_returns[baseline_stock],axis=0)
+	winner_fwd = lookfwd_returns_relative.multiply(lookback_winners).reset_index()
+	winning_stocks = lookback_winners.apply(lambda row: row[row == 1].index.values.tolist(), axis=1).to_frame() # this creates a dataframe with each row as list of winning stocks, date is index
+	winning_stocks.columns = ['tickers']
+	winning_stocks = winning_stocks.reset_index()
+	list_of_gains = [['']]*len(winning_stocks)
+	for ind in winning_stocks.index:
+		ticker_list = winning_stocks.loc[ind]['tickers']
+		list_of_gains[ind] = winner_fwd.loc[winner_fwd.index == ind, ticker_list].values.flatten().tolist()
+	winning_stocks['gains'] = list_of_gains
+	winning_stocks['num_stocks'] = winning_stocks.apply(lambda x: len(x['tickers']), axis = 1)
+	winning_stocks['sell_date'] = winning_stocks.apply(lambda x: x['index']+timedelta(days=lookfwd_window*7), axis = 1)
+	return winning_stocks
 
 
-
-backward,forward,winners = is_winner(bwd_return,fwd_return,dow_list, 15)
-
-
-final_pnl = backtest(backward,one_week_return.fillna(0),dow_list)
-
-testing = backtest2(dow_historical_data,5,5,2,dow_list)
-
-
-backward_window = list(range(8,14)) ## x axis
-backward_threshold = list(range(8,14)) ## y axis
-forward_window = list(range(1,7))
-
-
-
-# below is a sample code which runs avg pnl across a range of inputs. Need to put these entries into an array
-for i in range(len(backward_window)):
-	for j in range(len(backward_threshold)):
-		Z[i][j] = backtest2(dow_historical_data,backward_window[i],backward_threshold[j],2,dow_list)
-		
-
-backtest2(dow_historical_data,8,9,2,dow_list)
-
-
-
-
-lists = [backward_window, backward_threshold, forward_window]
-
-df1 = pd.DataFrame(list(itertools.product(*lists)), columns=['backward_window', 'backward_threshold', 'forward_window'])
-
-df1['n-week return'] = df1.apply(lambda row : backtest2(dow_historical_data, row['backward_window'].astype(int), row['backward_threshold'],row['forward_window'],dow_list), axis = 1)
-df1['annual return'] = df1.apply(lambda row : ann_return(row['n-week return'], row['forward_window']), axis = 1)
-
-out = df1.sort_values(by='annual return', ascending=False)
+winning_stocks = calibrator(dow_historical_data, 8,2,2.0,'spy')
 
 
 
