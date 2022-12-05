@@ -82,11 +82,25 @@ def calibrator(mkt_data, lookback_window, lookfwd_window, lookback_threshold, ba
 	winning_stocks['gains'] = list_of_gains
 	winning_stocks['num_stocks'] = winning_stocks.apply(lambda x: len(x['tickers']), axis = 1)
 	winning_stocks['sell_date'] = winning_stocks.apply(lambda x: x['index']+timedelta(days=lookfwd_window*7), axis = 1)
+	winning_stocks['pct_gain'] = winning_stocks.apply(lambda x: mean(x['gains']), axis = 1) #[mean, stdev]
+	winning_stocks['stdev'] = winning_stocks.apply(lambda x: np.std(x['gains']), axis = 1) #[mean, stdev]
 	return winning_stocks
 
 
 winning_stocks = calibrator(dow_historical_data, 8,2,2.0,'spy')
 
+
+#########################################################################################################################################################
+
+backward_window = list(range(8,14)) ## x axis
+backward_threshold = list(range(8,14)) ## y axis
+forward_window = list(range(1,7))
+
+
+# below is a sample code which runs avg pnl across a range of inputs. Need to put these entries into an array
+for i in range(len(backward_window)):
+	for j in range(len(backward_threshold)):
+		print(i)
 
 
 
